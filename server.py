@@ -1,3 +1,5 @@
+# Fernanda Rosa e Morgana Weber
+
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import time
 import os
@@ -17,21 +19,21 @@ class Server(BaseHTTPRequestHandler):
         self.send_header("Content-type", "text/html")
         self.end_headers()
         
-        self.wfile.write(bytes("<html><head><title>T1 LABORATÓRIO DE SISOP</title></head>", "utf-8"))
+        self.wfile.write(bytes("<html><head><title>T1 LABORATORIO DE SISOP</title></head>", "utf-8"))
         self.wfile.write(bytes("<body>", "utf-8"))
         self.wfile.write(bytes("<h1>Trabalho 1 - Laboratorio de Sistemas Operacionais</h1>", "utf-8"))
         self.wfile.write(bytes("<h2>Fernanda Rosa e Morgana Weber</h2>", "utf-8"))
         self.wfile.write(bytes("<p>Dados do servidor:</p>", "utf-8"))
-        self.wfile.write(bytes(f"<li>Data e hora do sistema: {self.getDataEHora()} </li>", "utf-8"))
-        self.wfile.write(bytes(f"<li>Uptime em segundos: {self.getUptime()} </li>", "utf-8"))
-        self.wfile.write(bytes(f"<li>Modelo do processador: {self.getModelName()} </li>", "utf-8"))
-        self.wfile.write(bytes(f"<li>Velocidade do processador (CPU Speed): {self.getVelocity()} MHz</li>", "utf-8"))
-        self.wfile.write(bytes("<li>Capacidade ocupada do processador (%): </li>", "utf-8"))
-        self.wfile.write(bytes(f"<li>Quantidade de memoria RAM total (MB): {self.getTotalRAM()} MB </li>", "utf-8"))
-        self.wfile.write(bytes(f"<li>Quantidade de memória RAM usada (MB): {self.getUsedRAM()} MB </li>", "utf-8"))
-        self.wfile.write(bytes(f"<li>Versao do sistema: {self.getSystemVersion()} </li>", "utf-8"))
+        self.wfile.write(bytes(f"<li><strong>Data e hora do sistema:</strong> {self.getDataEHora()}</li>", "utf-8"))
+        self.wfile.write(bytes(f"<li><strong>Uptime em segundos:</strong> {self.getUptime()} </li>", "utf-8"))
+        self.wfile.write(bytes(f"<li><strong>Modelo do processador:</strong> {self.getModelName()} </li>", "utf-8"))
+        self.wfile.write(bytes(f"<li><strong>Velocidade do processador (CPU Speed):</strong> {self.getVelocity()} MHz</li>", "utf-8"))
+        self.wfile.write(bytes(f"<li><strong>Capacidade ocupada do processador (%):</strong> {self.getProcessorCapacity()} </li>", "utf-8"))
+        self.wfile.write(bytes(f"<li><strong>Quantidade de memoria RAM total (MB):</strong> {self.getTotalRAM()} MB </li>", "utf-8"))
+        self.wfile.write(bytes(f"<li><strong>Quantidade de memoria RAM usada (MB):</strong> {self.getUsedRAM()} MB </li>", "utf-8"))
+        self.wfile.write(bytes(f"<li><strong>Versao do sistema:</strong> {self.getSystemVersion()} </li>", "utf-8"))
         
-        self.wfile.write(bytes(f"<li>LISTA DE PROCESSOS:  </li>", "utf-8"))
+        self.wfile.write(bytes(f"<li><strong>LISTA DE PROCESSOS:</strong></li>", "utf-8"))
         
         processes = self.getRunningProcesses()
         for name, pid in processes:
@@ -53,6 +55,26 @@ class Server(BaseHTTPRequestHandler):
                 if 'cpu MHz' in line:
                     cpu_speed = float(line.strip().split(':')[1])
                     return cpu_speed
+                
+    # Capacidade ocupada pelo processador
+    def getProcessorCapacity(self):
+        start = self.getCPUTime()
+        #wait a second
+        time.sleep(1)
+        stop = self.getCPUTime()
+
+        cpu_load = {}
+
+        for cpu in start:
+            Total = stop[cpu]['total']
+            PrevTotal = start[cpu]['total']
+
+            Idle = stop[cpu]['idle']
+            PrevIdle = start[cpu]['idle']
+            CPU_Percentage=((Total-PrevTotal)-(Idle-PrevIdle))/(Total-PrevTotal)*100
+            cpu_load.update({cpu: CPU_Percentage})
+        return cpu_load
+        
 
     # Versao do sistema
     def getSystemVersion(self):
@@ -76,19 +98,22 @@ class Server(BaseHTTPRequestHandler):
     
     # RAM usada
     def getUsedRAM(self):
-        total_memory = self.getTotalRAM()
         with open('/proc/meminfo', 'r') as f:
             for line in f:
-                if line.startswith('MemFree'):
-                    free_memory = int(line.split()[1])
-                    used_memory = total_memory - free_memory
-                    return used_memory
+                if line.startswith('MemTotal'):
+                    total_mem = int(line.split()[1])
+                elif line.startswith('MemAvailable'):
+                    available_mem = int(line.split()[1])
+
+        # Calculate used memory
+        used_mem = total_mem - available_mem
+        return used_mem
+
 
     # Data e hora do sistema
     def getDataEHora(self):
-        t = time.localtime()
-        current_time = time.asctime(t)
-        return current_time
+        dateAndHour = os.popen('date').read()
+        return dateAndHour
     
     # Processos em execucao
     def getRunningProcesses(self):
@@ -102,6 +127,26 @@ class Server(BaseHTTPRequestHandler):
                 except IOError:
                     continue
         return processes
+
+    # metodo auxiliar para getProcessorCapacity()
+    def getCPUTime(self):
+        cpu_infos = {} #collect here the information
+        with open('/proc/stat','r') as f_stat:
+            lines = [line.split(' ') for content in f_stat.readlines() for line in content.split('\n') if line.startswith('cpu')]
+
+            #compute for every cpu
+            for cpu_line in lines:
+                if '' in cpu_line: cpu_line.remove('')#remove empty elements
+                cpu_line = [cpu_line[0]]+[float(i) for i in cpu_line[1:]]#type casting
+                cpu_id,user,nice,system,idle,iowait,irq,softrig,steal,guest,guest_nice = cpu_line
+
+                Idle=idle+iowait
+                NonIdle=user+nice+system+irq+softrig+steal
+
+                Total=Idle+NonIdle
+                #update dictionionary
+                cpu_infos.update({cpu_id:{'total':Total,'idle':Idle}})
+            return cpu_infos
 
 
 
